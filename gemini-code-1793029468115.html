@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SOption 全自動選擇權雙賣下單機 | 特殊選才專案報告</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Prism.js CSS (Dark Theme for Web) -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+
+    <!-- Tailwind Config & Custom Fonts -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Microsoft JhengHei"', '微軟正黑體', 'sans-serif'],
+                        mono: ['Consolas', 'Monaco', 'monospace'],
+                    },
+                    colors: {
+                        brand: { 400: '#60a5fa', 500: '#3b82f6', 600: '#2563eb' },
+                        dark: { bg: '#0b1120', card: '#1e293b', border: '#334155' },
+                        accent: { green: '#10b981', red: '#ef4444', yellow: '#f59e0b', purple: '#8b5cf6' }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* ================= Web 顯示樣式 (深色交易終端風格) ================= */
+        body { background-color: #0b1120; color: #f8fafc; scroll-behavior: smooth; }
+        
+        .glass-card {
+            background: rgba(30, 41, 59, 0.6);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(51, 65, 85, 0.8);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        .section-title {
+            position: relative;
+            padding-left: 1.25rem;
+            margin-bottom: 1.5rem;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #f1f5f9;
+            display: flex;
+            align-items: center;
+        }
+        .section-title::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            height: 100%;
+            width: 5px;
+            background: linear-gradient(to bottom, #3b82f6, #10b981);
+            border-radius: 4px;
+        }
+
+        .zoom-img { transition: transform 0.3s ease, box-shadow 0.3s ease; border-radius: 0.5rem; border: 1px solid #334155; }
+        .zoom-img:hover { transform: scale(1.02); z-index: 10; position: relative; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); }
+
+        pre[class*="language-"] {
+            border-radius: 0.5rem;
+            border: 1px solid #334155;
+            margin: 1.5rem 0;
+            font-size: 0.9rem;
+            background: #0f172a !important; 
+        }
+
+        /* 流程圖與基礎知識卡片 */
+        .concept-card {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.9));
+            border-top: 4px solid #3b82f6;
+            transition: all 0.3s ease;
+        }
+        .concept-card:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5); }
+
+        /* ================= 列印樣式 (標準 A4 白底黑字) ================= */
+        @media print {
+            @page { size: A4; margin: 1.2cm 1.5cm; }
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            
+            body { background-color: #ffffff !important; color: #111827 !important; font-size: 10.5pt; }
+            .no-print { display: none !important; }
+            
+            /* 將深色卡片轉為白底 */
+            .glass-card, .bg-slate-800, .bg-slate-900, .bg-gray-900, .bg-gray-950, .bg-dark-bg, .bg-dark-card, .concept-card {
+                background: #ffffff !important;
+                border: 1px solid #d1d5db !important;
+                box-shadow: none !important;
+                color: #111827 !important;
+            }
+            .concept-card { border-top: 4px solid #3b82f6 !important; }
+            
+            /* 標題與文字顏色修正 */
+            .text-gray-300, .text-gray-400, .text-white, .text-slate-200, .text-slate-300, .text-slate-400 { color: #1f2937 !important; }
+            .section-title { color: #111827 !important; margin-top: 1.5rem !important; padding-bottom: 0.25rem; border-bottom: 1px solid #e5e7eb; }
+            .section-title::before { display: none; } 
+            
+            /* 避免換頁切斷圖片或程式碼 */
+            section, .print-avoid-break, .concept-card { page-break-inside: avoid !important; margin-bottom: 1rem !important; }
+            h2, h3, h4 { page-break-after: avoid !important; }
+            img { max-width: 100% !important; page-break-inside: avoid !important; border: 1px solid #d1d5db !important; margin-bottom: 0.5rem; box-shadow: none !important; }
+            
+            pre[class*="language-"], code[class*="language-"] {
+                color: #111827 !important; background: #f9fafb !important; text-shadow: none !important;
+                border: 1px solid #d1d5db !important; page-break-inside: avoid !important;
+                white-space: pre-wrap !important; word-break: break-all !important; font-size: 9pt !important;
+            }
+        }
+    </style>
+</head>
+<body class="antialiased leading-relaxed">
+
+    <!-- Web Navigation -->
+    <nav class="fixed w-full z-50 bg-dark-bg/95 backdrop-blur border-b border-dark-border no-print shadow-sm">
+        <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="font-bold text-xl text-white tracking-wide flex items-center gap-3">
+                <i class="fas fa-terminal text-brand-500"></i> SOption 專案報告
+            </div>
+            <button onclick="window.print()" class="bg-brand-600 hover:bg-brand-500 text-white px-4 py-2 rounded-md shadow transition flex items-center text-sm font-bold">
+                <i class="fas fa-print mr-2"></i>匯出/列印 A4
+            </button>
+        </div>
+    </nav>
+
+    <!-- 專案封面 -->
+    <header class="pt-28 pb-12 px-4 border-b border-dark-border bg-gradient-to-b from-slate-900 to-dark-bg print:bg-none print:pt-4 print:pb-6 print:border-b-2 print:border-black">
+        <div class="max-w-5xl mx-auto text-center print:text-left">
+            <div class="inline-block px-3 py-1 mb-4 rounded-full bg-brand-500/20 text-brand-400 text-xs font-bold tracking-wider uppercase border border-brand-500/30 print:bg-gray-100 print:text-gray-800 print:border-gray-300">
+                Algorithm Trading & Risk Management System
+            </div>
+            <h1 class="text-4xl md:text-5xl font-extrabold text-white mb-4 leading-tight tracking-tight print:text-black">
+                SOption 可排程全自動選擇權雙賣下單機
+            </h1>
+            
+            <div class="flex flex-wrap items-center justify-center print:justify-start gap-4 text-sm text-slate-400 print:text-gray-800 font-mono bg-dark-card/50 print:bg-transparent py-3 px-6 rounded-lg inline-flex border border-dark-border print:border-none mb-6">
+                <div class="flex items-center gap-2"><i class="fas fa-user-astronaut text-brand-400"></i> 開發者: <strong class="text-white print:text-black text-base">龐漢強/林煒閔</strong></div>
+                <div class="flex items-center gap-2"><i class="fas fa-user-astronaut text-brand-400"></i> 指導老師: <strong class="text-white print:text-black text-base">林煒閔</strong></div>
+                <span class="hidden md:inline text-slate-600 print:hidden">|</span>
+                <div class="flex items-center gap-2"><i class="fas fa-code text-accent-green"></i> C# (.NET WinForms)</div>
+                <span class="hidden md:inline text-slate-600 print:hidden">|</span>
+                <div class="flex items-center gap-2"><i class="fas fa-network-wired text-accent-yellow"></i> SinoPac Shioaji API</div>
+            </div>
+
+            <p class="text-md md:text-lg text-slate-300 max-w-4xl mx-auto print:text-gray-700 print:mx-0 print:max-w-none text-justify">
+                為了克服人類交易時的情緒波動與盯盤極限，運用 C# 與永豐 API 開發了這套量化交易系統。本系統以「選擇權雙賣策略」為核心，結合永豐系統API即時報價、Call/Put總點數動態平衡來保護賣方虧損無限的風險、可排程自動進出場與嚴格的自動風控機制、加上雲端Google Sheet數據紀錄做為策略修正或檢討用，完整實現可無人值守的全自動交易系統並已經上線實戰。
+            </p>
+            <p class="text-md md:text-lg text-slate-300 max-w-4xl mx-auto print:text-gray-700 print:mx-0 print:max-w-none text-justify">
+<br>本專案展示報告為特殊選才備審資料所設計。© 2026 龐漢強 林煒閔. All Rights Reserved.    </p>
+        </div>
+    </header>
+
+    <main class="max-w-5xl mx-auto px-4 py-8 space-y-16 print:py-4 print:space-y-10">
+
+        <!-- ================= 選擇權基礎知識區塊 ================= -->
+        <section class="print-avoid-break">
+            <h2 class="section-title"><i class="fas fa-book-open mr-3 text-brand-400"></i>1. 選擇權核心理論與雙賣策略基礎</h2>
+            
+            <p class="text-slate-300 print:text-gray-700 mb-6 text-justify leading-relaxed">
+                在介紹下單機的演算法前，必須先了解其背後的金融邏輯。選擇權 (Options) 是一種衍生性金融商品，買方支付「權利金 (Premium)」換取未來履約的權利，而賣方則收取權利金並承擔履約義務。以下為構成市場的四大基本部位：
+            </p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                <!-- Call (買權) 組合說明 -->
+                <div class="concept-card rounded-lg p-5 !border-blue-500">
+                    <h3 class="text-xl font-bold text-blue-400 mb-4 flex justify-between items-center">
+                        <span>買權 (Call) 結構分析</span>
+                        <span class="bg-blue-500/20 text-blue-300 text-xs px-2 py-1 rounded">看漲 vs 看不漲</span>
+                    </h3>
+                    <div class="space-y-2 text-sm text-slate-300 mb-4">
+                        <p><strong class="text-accent-green">買進買權 (Buy Call, BC)：</strong>看大漲。最大獲利無限，最大損失為支付的權利金。</p>
+                        <p><strong class="text-accent-red">賣出買權 (Sell Call, SC)：</strong>看不漲。最大獲利為收取的權利金，最大損失無限。</p>
+                    </div>
+                    <div class="mt-4 bg-dark-bg/50 border border-dark-border rounded overflow-hidden">
+                        <img src="image_10.png" alt="買進買權與賣出買權損益圖" class="w-full zoom-img">
+                    </div>
+                </div>
+
+                <!-- Put (賣權) 組合說明 -->
+                <div class="concept-card rounded-lg p-5 !border-purple-500">
+                    <h3 class="text-xl font-bold text-purple-400 mb-4 flex justify-between items-center">
+                        <span>賣權 (Put) 結構分析</span>
+                        <span class="bg-purple-500/20 text-purple-300 text-xs px-2 py-1 rounded">看跌 vs 看不跌</span>
+                    </h3>
+                    <div class="space-y-2 text-sm text-slate-300 mb-4">
+                        <p><strong class="text-accent-green">買進賣權 (Buy Put, BP)：</strong>看大跌。最大獲利極高，最大損失為支付的權利金。</p>
+                        <p><strong class="text-accent-red">賣出賣權 (Sell Put, SP)：</strong>看不跌。最大獲利為收取的權利金，最大損失極高。</p>
+                    </div>
+                    <div class="mt-4 bg-dark-bg/50 border border-dark-border rounded overflow-hidden">
+                        <img src="image_11.png" alt="買進賣權與賣出賣權損益圖" class="w-full zoom-img">
+                    </div>
+                </div>
+            </div>
+
+            <!-- 雙賣策略 -->
+            <div class="bg-gray-900 border border-gray-800 rounded-xl p-6 md:p-8">
+                <h3 class="text-xl font-bold text-brand-400 mb-4">核心策略：雙賣策略 (Short Strangle / Straddle)</h3>
+                <div class="flex flex-col md:flex-row gap-6 items-center">
+                    <div class="flex-1 space-y-3 text-sm text-slate-300 text-justify">
+                        <p>
+                            <strong>策略原理：</strong> 同時建立 <span class="text-accent-green font-bold">賣出買權 (SC)</span> 與 <span class="text-accent-red font-bold">賣出賣權 (SP)</span>，通常選擇價外 (Out-of-the-Money, OTM) 的履約價。
+                            只要結算時，標的指數在兩個履約價的區間內盤整，選擇權的「時間價值 (Time Value)」會隨著時間流逝而歸零，賣方即可安全將兩邊的權利金全部收下。
+                        </p>
+                        <p class="text-accent-yellow font-bold mt-2">
+                            <i class="fas fa-exclamation-triangle mr-1"></i> 為什麼需要自動化下單機？
+                        </p>
+                        <p>
+                            雙賣策略被稱為「收租策略」，勝率極高，但最大弱點在於 <strong>風險無限</strong>。如果發生極端單邊行情 (黑天鵝)，虧損將極速擴大。
+                            因此，人類盯盤往往會因為情緒不肯停損，或來不及反手避險。這促使我開發了這套系統，將「時間價值萃取」、「部位口數對沖」與「即時保證金監控」完全交由冰冷的程式碼嚴格執行。
+                        </p>
+                    </div>
+                    <div class="w-full md:w-1/2 bg-black p-1 rounded border border-gray-700">
+                         <img src="image_9.png" alt="雙賣策略區間獲利示意圖" class="w-full h-auto rounded">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= 系統架構與流程 ================= -->
+        <section id="full-flow-section" class="mb-12 bg-gray-900 border border-gray-800 rounded-xl p-6 md:p-8 relative overflow-hidden shadow-2xl print-avoid-break mt-12">
+            <div class="absolute top-0 right-0 bg-brand-600 text-white px-3 py-1 text-xs font-semibold rounded-bl-lg uppercase tracking-wider">
+                System Architecture
+            </div>
+            
+            <h2 class="text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400 mb-2 flex items-center gap-2">
+                <span>⚙️</span> 2. 完整執行流程與策略控制架構
+            </h2>
+            <p class="text-gray-400 text-sm md:text-base mb-6 border-b border-gray-800 pb-4">
+                本系統的核心是基於事件驅動（Event-driven）的微秒級/秒級交易閉環。下圖為下單機從啟動、監控、決策、風控到執行與雲端備份的完整運行軌跡，能有效佐證程式碼的完全自主開發與金融風險邏輯。
+            </p>
+
+            <div class="mb-8 bg-black rounded-lg border border-gray-800 p-2 md:p-4 shadow-inner">
+                <img src="architecture_flow.png" alt="下單機完整操作與執行流程圖" class="w-full h-auto rounded border border-gray-700">
+            </div>
+
+            <!-- 面試講解重點（逐點剖析） -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-sm">
+                <div class="bg-gray-950 p-5 rounded-lg border border-gray-850">
+                    <div class="text-brand-400 font-bold mb-2 text-base">01. 【啟動與登入】安全與訂閱</div>
+                    <p class="text-gray-400 leading-relaxed mb-3">透過本機與硬體驗證防範未授權執行。讀取加密憑證向永豐 API 登入並驗證簽章（<code class="text-xs text-emerald-400 bg-emerald-950 px-1 rounded">_api.ca_activate</code>），成功後動態訂閱 T 字報價。</p>
+                </div>
+                <div class="bg-gray-950 p-5 rounded-lg border border-gray-850">
+                    <div class="text-emerald-400 font-bold mb-2 text-base">02. 【即時核心引擎】監控與計算</div>
+                    <p class="text-gray-400 leading-relaxed mb-3">使用 <code class="text-xs text-emerald-400 bg-emerald-950 px-1 rounded">OneSecTimer</code> 定時迴圈。接收報價後即時計算合成期貨與重要的「價平和 (CPmin)」，動態高亮 GridView 價平位置，避免卡頓漏 Tick。</p>
+                </div>
+                <div class="bg-gray-950 p-5 rounded-lg border border-gray-850">
+                    <div class="text-purple-400 font-bold mb-2 text-base">03. 【策略與決策】智慧執行</div>
+                    <p class="text-gray-400 leading-relaxed mb-3">包含動態點數平衡 (CP 比值偏離自動防守)、自動建倉排程 (定時+振幅過濾)，以及穩步清倉 (達損益門檻自動追價平倉)。完全排除感性交易。</p>
+                </div>
+                <div class="bg-gray-950 p-5 rounded-lg border border-gray-850">
+                    <div class="text-orange-400 font-bold mb-2 text-base">04. 【風險控管機制】多層防護</div>
+                    <p class="text-gray-400 leading-relaxed mb-3">微秒級監控「保證金」與「最大口數上限」。一旦跌破預警水位，系統暫停賣出建倉，強制執行「自動降載」與「買方避險鎖單」，確保帳戶不穿倉。</p>
+                </div>
+                <div class="bg-gray-950 p-5 rounded-lg border border-gray-850 lg:col-span-2">
+                    <div class="text-cyan-400 font-bold mb-2 text-base">05. 【執行、回報與雲端】自動追蹤</div>
+                    <p class="text-gray-400 leading-relaxed mb-3">委託紀錄於本機快照。成交後觸發 <code class="text-xs text-emerald-400 bg-emerald-950 px-1 rounded">order_cb</code>，立刻透過 Telegram 發送當前 UI 截圖通知；並利用 Google Sheets API 定時將權益數與各履約價寫入雲端試算表，達成完全無人值守運營與大數據存檔。</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- 3. 系統主畫面與報價解析 -->
+        <section class="glass-card p-6 md:p-8 rounded-xl print-avoid-break">
+            <h2 class="section-title"><i class="fas fa-desktop mr-3 text-brand-500"></i>3. 系統主介面與動態 T 字報價 (Dashboard)</h2>
+            <figure class="mb-6">
+                <img src="Snipaste_2026-10-25_13-29-50.png" alt="SOption 主介面" class="w-full zoom-img" />
+                <figcaption class="text-center text-xs text-slate-400 mt-2">▲ 系統總覽：整合報價、部位監控、動態比值與各項功能分頁</figcaption>
+            </figure>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+                <div>
+                    <figure>
+                        <img src="Snipaste_2026-10-25_13-30-56.png" alt="T字報價表" class="w-full zoom-img" />
+                        <figcaption class="text-center text-xs text-slate-400 mt-2">▲ 即時 T字報價表：即時運算殘餘價值與價平標示 (黃底)</figcaption>
+                    </figure>
+                </div>
+                <div class="space-y-4 text-slate-300 text-justify text-sm pt-2">
+                    <p>
+                        <strong>T 字報價與即時監控：</strong> 系統利用非同步回呼 (Callback) 處理海量 Tick 報價。中央的 DataGridView 會即時計算出當下的「價平 (ATM)」，並自動扣除合約的內含價值，萃取出最關鍵的「純時間價值 (Time Value)」。
+                    </p>
+                    <p>
+                        掌握真實的時間價值，程式才能在權利金過高時「自動建倉」，並在權利金收斂至殘餘點數時「自動穩步清倉」，精確鎖定獲利。
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- 4. 動態平衡與技術分析 -->
+        <section class="print-avoid-break">
+            <h2 class="section-title"><i class="fas fa-balance-scale-right mr-3 text-accent-yellow"></i>4. 動態點數平衡防禦與 K線位階判定</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <figure>
+                    <img src="Snipaste_2026-10-25_13-30-50.png" alt="點數監控面板" class="w-full zoom-img" />
+                    <figcaption class="text-center text-xs text-slate-400 mt-2">▲ 點數比值面板：即時呈現 CP 差、保證金狀態與點數比值</figcaption>
+                </figure>
+                <figure>
+                    <img src="Snipaste_2026-10-25_13-30-01.png" alt="平衡策略設定" class="w-full zoom-img" />
+                    <figcaption class="text-center text-xs text-slate-400 mt-2">▲ 平衡策略設定：支援多組偏離門檻，觸發自動順/逆勢防禦</figcaption>
+                </figure>
+            </div>
+            
+            <div class="space-y-4 text-slate-300 mb-6 text-justify text-sm">
+                <p>
+                    <strong>動態點數平衡演算法 (CP Ratio)：</strong> 
+                    行情急拉或急殺時，賣方部位的一側會急遽虧損。系統將 Call 與 Put 的總殘點轉換為 <strong>點數比值 (CP Ratio)</strong>。當比值偏離中心點 (如 0.5) 達到自訂門檻，系統即刻發動防守：自動平倉虧損端，或在更遠的價外檔位加碼建倉，強制將 Delta 風險降至中立。
+                </p>
+            </div>
+
+            <figure class="mb-6">
+                <img src="Snipaste_2026-10-25_13-30-27.png" alt="K線與位階運算" class="w-full zoom-img bg-white" />
+                <figcaption class="text-center text-xs text-slate-400 mt-2">▲ K線技術分析：自繪近期 K 棒，判斷技術面位階，輔助建倉決策</figcaption>
+            </figure>
+            
+            <div class="mt-4 bg-gray-900 rounded-lg overflow-hidden border border-gray-700">
+                <div class="bg-gray-800 px-4 py-2 text-brand-400 font-bold text-sm border-b border-gray-700">
+                    <i class="fas fa-code mr-2"></i>[程式碼展示] 動態偏移防禦決策 (C# 節錄)
+                </div>
+<pre class="!m-0 !border-0 !rounded-none"><code class="language-csharp">private void ProcessBalanceLogic(int index, double Ratio, double center, CPConfig config)
+{
+    double range = Convert.ToDouble(config.ActionRange.Text) * 0.01;
+    bool biasToPut = false;
+
+    // 1. 偵測比值偏離方向 (Ratio > center 表示上漲，Put 權利金萎縮)
+    if (Ratio > center + range + temprange) { biasToPut = true; }
+    else if (Ratio < center - range - temprange) { biasToPut = false; }
+    else return; // 處於安全平衡區，不動作
+
+    // 2. 嚴格風控檢查：保證金是否充裕、賣方總口數是否達上限
+    decimal margin = _api.Margin().available_margin;
+    decimal marginLimit = decimal.TryParse(tB_MarginPrice.Text, out decimal lim) ? lim : 0;
+    int currentS = Math.Abs(int.Parse(CALL_S.Text)) + Math.Abs(int.Parse(PUT_S.Text));
+    
+    bool isRiskLimitReached = (margin < marginLimit) || (currentS >= TotalS);
+
+    // 3. 執行防禦動作
+    if (isRiskLimitReached) {
+        Order_MsgLog($"⚠️ 保證金不足或賣口達上限，啟動【買方避險鎖單】");
+        // ... 執行 Buy Put / Buy Call 降低曝險
+    } else {
+        // 資源充足：依據設定價外檔位，動態建立 Sell 部位平衡 Delta
+        int tryIndex = biasToPut ? atmStrike_Index - mIndex : atmStrike_Index + mIndex;
+        sendOrder((biasToPut ? "SP" : "SC") + tryIndex, "Auto", config.Qty_S.Text, config.Tick_S.Text, "5", "動態平衡單");
+    }
+}
+</code></pre>
+            </div>
+        </section>
+
+        <!-- 5. 進階策略設定與自動排程 -->
+        <section class="glass-card p-6 md:p-8 rounded-xl print-avoid-break">
+            <h2 class="section-title"><i class="fas fa-cogs mr-3 text-accent-purple"></i>5. 進階策略與自動排程 (Scheduling & Tactics)</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <figure>
+                    <img src="Snipaste_2026-10-25_13-30-19.png" alt="自動排程與穩步清倉" class="w-full zoom-img" />
+                    <figcaption class="text-center text-xs text-slate-400 mt-2">▲ 完整的排程面板：支援精確定時建倉與追價穩步清倉</figcaption>
+                </figure>
+                <figure>
+                    <img src="Snipaste_2026-10-25_13-30-13.png" alt="時間價值策略" class="w-full zoom-img" />
+                    <figcaption class="text-center text-xs text-slate-400 mt-2">▲ 時間價值追蹤：紀錄取樣平均，若市場權利金異常偏離即啟動加減碼</figcaption>
+                </figure>
+            </div>
+            <figure class="mb-6 w-full md:w-3/4 mx-auto">
+                <img src="Snipaste_2026-10-25_13-30-07.png" alt="買方策略設定" class="w-full zoom-img" />
+                <figcaption class="text-center text-xs text-slate-400 mt-2">▲ 雙買策略與 Roll 單機制：在單邊極端趨勢中進行買方保護與滾動平倉</figcaption>
+            </figure>
+
+            <div class="space-y-4 text-slate-300 text-justify text-sm">
+                <p>
+                    <strong>自動穩步清倉 (Step-Clear)：</strong> 為了避免大量市價平倉造成「滑價 (Slippage)」，演算法透過定時器，每次以少量口數掃描殘值低於設定值 (如小於 3 點) 的合約，自動掛出限價單平倉，將市場衝擊成本降至最低。
+                </p>
+                <p>
+                    另外，系統內建**買方 Roll 單 (換倉) 機制**。當市場發生單邊突破時，系統會自動平倉獲利的避險買單，並向更遠的價外重新建立買方保護，確保策略在遇到黑天鵝時依然能存活。
+                </p>
+            </div>
+        </section>
+
+        <!-- 6. 外部整合：TG、Google Sheets、SFT -->
+        <section class="print-avoid-break">
+            <h2 class="section-title"><i class="fas fa-link mr-3 text-brand-500"></i>6. 外部整合：圖文推播與雲端同步</h2>
+            
+            <div class="space-y-8">
+                <!-- Telegram -->
+                <div class="bg-gray-900 rounded-lg overflow-hidden border border-gray-700">
+                    <div class="p-4 border-b border-gray-700 flex items-center">
+                        <i class="fab fa-telegram text-blue-400 text-xl mr-3"></i>
+                        <h3 class="text-lg font-bold text-white print:text-black">Telegram 即時圖文推播 (WinForms 截圖技術)</h3>
+                    </div>
+                    <div class="p-4 text-sm text-slate-300 text-justify">
+                        完全脫離電腦盯盤。當系統成交或定時排程到達時，利用 C# 原生繪圖函式，直接擷取下單機當下畫面的圖片，連同格式化的部位報表發送至手機。
+                    </div>
+<pre class="!m-0 !border-0 !border-t !border-gray-700 !rounded-none"><code class="language-csharp">public async Task SendToTG(Form form, string tgMessage)
+{
+    // 精確擷取當前應用程式視窗範圍
+    Rectangle bounds = form.RectangleToScreen(form.ClientRectangle);
+    using (var bmp = new Bitmap(bounds.Width, bounds.Height))
+    using (var g = Graphics.FromImage(bmp))
+    using (var ms = new MemoryStream())
+    {
+        g.CopyFromScreen(bounds.Location, Point.Empty, bounds.Size); 
+        bmp.Save(ms, ImageFormat.Jpeg);
+        ms.Seek(0, SeekOrigin.Begin);
+
+        // 建立 MultipartFormData 發送至 Telegram Bot API
+        using (var formContent = new MultipartFormDataContent())
+        {
+            formContent.Add(new StringContent(chatId), "chat_id");
+            formContent.Add(new StringContent(tgMessage), "caption");
+            formContent.Add(new StringContent("HTML"), "parse_mode");
+            
+            var image = new StreamContent(ms);
+            image.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
+            formContent.Add(image, "photo", "screenshot.jpg");
+
+            await client.PostAsync($"https://api.telegram.org/bot{botToken}/sendPhoto", formContent);
+        }
+    }
+}
+</code></pre>
+                </div>
+
+                <!-- Google Sheets -->
+                <div class="bg-gray-900 rounded-lg overflow-hidden border border-gray-700">
+                    <div class="p-4 border-b border-gray-700 flex items-center">
+                        <i class="fas fa-file-excel text-green-500 text-xl mr-3"></i>
+                        <h3 class="text-lg font-bold text-white print:text-black">Google Sheets API v4 雲端大數據日誌</h3>
+                    </div>
+                    <div class="p-4 text-sm text-slate-300 text-justify">
+                        系統背景非同步將每一筆委託時間、大盤指數、權益數、各履約價動態 append 到雲端試算表。不僅自動建立新的月份工作表，更能作為後續量化回測與樞紐分析的珍貴資料庫。
+                    </div>
+<pre class="!m-0 !border-0 !border-t !border-gray-700 !rounded-none"><code class="language-csharp">public static void UpdateShioajiRow(SheetsService service, string spreadsheetId, string sheetName, ...)
+{
+    // 建立欲寫入的資料陣列
+    var values = new List<IList<object>> {
+        new List<object> {
+            time.ToString("yyyy/MM/dd HH:mm:ss"), 
+            callS, callB, $"{callPoint:#,##0}",
+            txPrice, atmPrice, $"{equity:#,##0}", $"{TodaySubYestoday:#,##0}"
+        }
+    };
+
+    // 自動尋找試算表最後空白列
+    var request = service.Spreadsheets.Values.Get(spreadsheetId, $"{sheetName}!A2:A3000");
+    int targetRow = (request.Execute().Values?.Count ?? 0) + 2;
+
+    // 發送 Update 請求寫入雲端
+    var valueRange = new ValueRange { Values = values };
+    var updateRequest = service.Spreadsheets.Values.Update(valueRange, spreadsheetId, $"{sheetName}!A{targetRow}:V{targetRow}");
+    updateRequest.ValueInputOption = SpreadsheetsResource.ValuesResource.UpdateRequest.ValueInputOptionEnum.USERENTERED;
+    updateRequest.Execute();
+}
+</code></pre>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Prism.js Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-csharp.min.js"></script>
+</body>
+
+</html>
